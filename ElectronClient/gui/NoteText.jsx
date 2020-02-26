@@ -41,6 +41,7 @@ const NoteTextViewer = require('./NoteTextViewer.min');
 const NoteRevisionViewer = require('./NoteRevisionViewer.min');
 const TemplateUtils = require('lib/TemplateUtils');
 const markupLanguageUtils = require('lib/markupLanguageUtils');
+const Tesseract = require('tesseract.js');
 
 require('brace/mode/markdown');
 // https://ace.c9.io/build/kitchen-sink.html
@@ -1222,6 +1223,41 @@ class NoteTextComponent extends React.Component {
 		}
 	}
 
+	async commandOcr(filePaths = null) {
+
+		if (!filePaths) {
+			filePaths = bridge().showOpenDialog({
+				properties: ['openFile', 'createDirectory', 'multiSelections'],
+			});
+			if (!filePaths || !filePaths.length) return;
+		}
+
+		// const position = this.currentTextOffset();
+
+		for (let i = 0; i < filePaths.length; i++) {
+			const filePath = filePaths[i];
+			try {
+				var t1 = performance.now();
+				Tesseract.recognize(
+					filePath,
+					'eng',
+					{ logger: m => console.log(m) }
+				).then(({ data: { text } }) => {
+					var t2 = performance.now();
+					console.log((t2-t1)/1000);
+					let newBody = this.state.note.body;
+					newBody += `\n${text}`;
+					shared.noteComponent_change(this, 'body', newBody);
+					this.scheduleHtmlUpdate();
+					this.scheduleSave();
+				});
+			} catch (error) {
+				reg.logger().error(error);
+				bridge().showErrorMessageBox(error.message);
+			}
+		}
+	}
+
 	async commandSetAlarm() {
 		await this.saveIfNeeded(true);
 
@@ -1696,6 +1732,14 @@ class NoteTextComponent extends React.Component {
 				iconName: 'fa-paperclip',
 				onClick: () => {
 					return this.commandAttachFile();
+				},
+			});
+
+			toolbarItems.push({
+				tooltip: _('ocr'),
+				iconName: 'fa-eye',
+				onClick: () => {
+					return this.commandOcr();
 				},
 			});
 
